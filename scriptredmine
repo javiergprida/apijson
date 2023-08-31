@@ -1,0 +1,45 @@
+import requests
+import json
+
+# Paso 1: Extraer datos de la API de NIST
+url_nist = "https://services.nvd.nist.gov/rest/json/cves/2.0"
+response_nist = requests.get(url_nist)
+data_nist = response_nist.json()
+
+# Paso 2: Extraer los campos requeridos de los datos de NIST
+cve_list = data_nist["CVE_Items"]
+
+for cve in cve_list:
+    cpe_name = cve["cve"]["affects"]["vendor"]["vendor_data"][0]["product"]["product_data"][0]["product_name"]
+    cve_id = cve["cve"]["CVE_data_meta"]["ID"]
+    cvss_v2_metrics = cve["impact"]["baseMetricV2"]["cvssV2"]["baseMetrics"]
+    cvss_v2_severity = cve["impact"]["baseMetricV2"]["severity"]
+    cvss_v3_metrics = cve["impact"]["baseMetricV3"]["cvssV3"]["baseMetrics"]
+    cvss_v3_severity = cve["impact"]["baseMetricV3"]["severity"]
+    cwe_id = cve["cve"]["problemtype"]["problemtype_data"][0]["description"][0]["value"]
+    descriptions = [d["value"] for d in cve["cve"]["description"]["description_data"]]
+    weaknesses = [w["value"] for w in cve["cve"]["problemtype"]["problemtype_data"][0]["description"]]
+    references = [r["url"] for r in cve["cve"]["references"]["reference_data"]]
+
+    # Paso 3: Realizar la petición a Redmine
+    url_redmine = "http://192.168.1.148//issues.json"
+    api_key = "2aac65f986c70af6af414c886d83200c8084e906"
+
+    headers = {
+        "Content-Type": "application/json",
+        "X-Redmine-API-Key": api_key
+    }
+
+    payload = {
+        "issue": {
+            "subject": cve_id,
+            "description": "\n".join(descriptions),
+            "notes": f"CWE ID: {cwe_id}\n\nWeaknesses: {', '.join(weaknesses)}\n\nReferences: {', '.join(references)}"
+        }
+    }
+
+    response_redmine = requests.post(url_redmine, headers=headers, data=json.dumps(payload))
+    if response_redmine.status_code == 201:
+        print(f"Issue {cve_id} created successfully in Redmine.")
+    else:
+        print(f"Failed to create issue {cve_id} in Redmine. Status code: {response_redmine.status_code}")
